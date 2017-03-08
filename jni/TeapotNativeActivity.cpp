@@ -25,10 +25,13 @@
 #include <android_native_app_glue.h>
 #include <android/native_window_jni.h>
 #include <cpu-features.h>
-#include <osterhoutgroup_ext.h>
+//#include <osterhoutgroup_ext.h>
 #include "TeapotRenderer.h"
 #include "NDKHelper.h"
+#include <dlfcn.h>
 
+void (*FP_extend_display)(android_app* app_, bool extend) = NULL;
+#define extend_display FP_extend_display
 //-------------------------------------------------------------------------
 //Preprocessor
 //-------------------------------------------------------------------------
@@ -36,7 +39,11 @@
 //-------------------------------------------------------------------------
 //Shared state for our app.
 //-------------------------------------------------------------------------
-struct android_app;
+
+
+typedef void (*FT_extend_display)(android_app*, bool);
+
+//struct android_app;
 class Engine {
 	TeapotRenderer renderer_;
 
@@ -121,11 +128,24 @@ void Engine::UnloadResources() {
  */
 int Engine::InitDisplay() {
 	if (!initialized_resources_) {
-		if (false) { //XXX use stereo or not
+		if (true) { //XXX use stereo or not
 			renderer_.stereo_cam.stereo = STEREO;
 			//call to osterhout ext to put displays into extend mode so we can use
 			//a 2560x720 frame buffer.
-			extend_display(app_, true);
+			void *dl_handle = dlopen("libosterhoutgroup_ext.so", RTLD_LAZY);
+			if (!dl_handle) {
+			    LOGI("ERROR: %s\n", dlerror());
+			} else {
+				void *func_handle = dlsym(dl_handle, "extend_display");
+				const char *error;
+				if ((error = dlerror()) != NULL) {
+					LOGI("FUNC ERROR: %s\n", dlerror());
+				} else {
+					FP_extend_display = reinterpret_cast<FT_extend_display>(func_handle);
+					LOGI("FUNC NO ERROR: %s\n", dlerror());
+					extend_display(app_, true);
+				}
+			}
 		} else {
 			renderer_.stereo_cam.stereo = NOSTEREO;
 		}
